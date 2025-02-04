@@ -1,0 +1,225 @@
+import java_cup.runtime.*;
+import java.util.ArrayList;
+
+action code{:
+    boolean c = false;
+    String x = "-1";
+:};
+
+terminal PYC, AP, CP, ALL, CLL, AC, CC, MAS, MENOS, POR, DIV, ASIG, NEG, MAYOR, MENOR, IGUAL, DIST, MENOREQ, MAYOREQ, AND, OR, IF, ELSE, 
+WHILE, DO, FOR, PRINT, UMINUS, INT, COMA, INCR, DECR, MOD, FLOAT, CINT, CFLOAT, IN, ERROR, MASIGUAL, MENOSIGUAL, PORIGUAL, ENTREIGUAL,
+INTERR, DP, ELVIS, SWITCH, CASE, DEFAULT, BREAK, AMPERSAND,CHAR, CCHAR, MONTE, MAYUS, PUNTO, LENGTH, STRING, BITLRDERECHA, BITLRIZQUIERDA;
+
+terminal String IDENT, ENTERO, REAL, CHARTEXT, STRINGTEXT;
+
+non terminal lista, lista_sent, sent, else, lista_variables_int, lista_variables_float, 
+declaracion, array, array_multiple, lista_cases, lista_variables_char, lista_variables_string;
+
+non terminal String exp, if_tag, while_tag, do_tag, for_tag, ternario, elvis, puntero, operador;
+
+non terminal ArrayList<String> lista_enteros;
+non terminal ArrayList<ArrayList<String>> lista_multiple;
+non terminal ArrayList<ArrayList<ArrayList<String>>> lista_triple;
+non terminal Tag cond, for_in;
+
+precedence left INTERR, DP;
+precedence left ELVIS;
+precedence right ASIG, MASIGUAL, MENOSIGUAL, PORIGUAL, ENTREIGUAL;
+precedence left OR;
+precedence left AND;
+precedence left IGUAL, DIST, MENOR, MENOREQ, MAYOR, MAYOREQ;
+precedence left MAS, MENOS;
+precedence left POR, DIV;
+precedence left MOD;
+precedence left BITLRDERECHA, BITLRIZQUIERDA;
+precedence left UMINUS;
+precedence right NEG;
+precedence left MONTE, MAYUS;
+precedence nonassoc IF;
+precedence nonassoc ELSE;
+
+start with lista;
+
+
+lista                   ::=         lista_sent {:Compilador.imprimeResultados();:}
+                        ;
+
+lista_sent              ::=         sent
+                        |           lista_sent sent
+                        ;
+
+sent                    ::=         exp PYC
+                        |           declaracion PYC
+                        |           if_tag:tag AP cond:c {:Compilador.etiqueta(c.getA());:} CP sent {:Compilador.goToLabel(tag); Compilador.etiqueta(c.getB());:} else {:Compilador.etiqueta(tag);:}
+                        |           while_tag:tag {:Compilador.etiqueta(tag);:} AP cond:c {:Compilador.etiqueta(c.getA());:} CP sent {:Compilador.goToLabel(tag);Compilador.etiqueta(c.getB());:}
+                        |           do_tag:tag {:Compilador.etiqueta(tag);:} sent WHILE AP cond:c {:Compilador.etiqueta(c.getA()); Compilador.goToLabel(tag);Compilador.etiqueta(c.getB());:} CP PYC
+                        |           for_tag:tag AP exp:e1 PYC {:Compilador.etiqueta(tag);:} cond:c PYC {:RESULT = Compilador.generarTag(); Compilador.etiqueta(RESULT.toString());:} exp:e2 CP {:Compilador.goToLabel(tag); Compilador.etiqueta(c.getA());:} sent {:Compilador.goToLabel(RESULT.toString());Compilador.etiqueta(c.getB());:}
+                        |           for_in:tag DO sent {:Compilador.goToLabel(tag.getA()); Compilador.etiqueta(tag.getB());:}
+                        |           PRINT exp:e PYC {:RESULT = Compilador.print(e,c);c=false;:}
+                        |           PRINT AP ALL lista_enteros:l CLL CP PYC {:Compilador.printList(l,c); c=false;:}
+                        |           PRINT AP STRINGTEXT:t CP PYC {:Compilador.printString(t); c =false;:}
+                        |           ALL {:Compilador.aumentarContexto();:} lista_sent CLL {:Compilador.disminuirContexto();:}
+                        |           SWITCH AP exp:e CP ALL lista_cases CLL
+                        |           ERROR {:Compilador.error("Comentarios anidados");:}
+                        ;
+
+for_tag                 ::=         FOR     {:RESULT = Compilador.generarTag();:}
+                        ;
+
+if_tag                  ::=         IF      {:RESULT = Compilador.generarTag();:}
+                        ;
+
+while_tag               ::=         WHILE   {:RESULT = Compilador.generarTag();:}
+                        ;
+
+do_tag                  ::=         DO      {:RESULT = Compilador.generarTag();:}
+                        ;
+
+else                    ::=         ELSE sent
+                        |           ;
+
+lista_cases             ::=         CASE exp:e DP lista_sent
+                        |           CASE exp:e DP lista_sent BREAK PYC
+                        |           DEFAULT DP lista_sent
+                        |           CASE exp:e DP
+                        |           CASE exp:e DP BREAK PYC
+                        ;
+
+for_in                  ::=         for_tag:tag IDENT:i1 IN IDENT:i2 {:Compilador.checkDeclaracion(i1);Compilador.checkDeclaracionArray(i1,i2);RESULT = Compilador.forIn(i1,i2,tag,null);:}
+                        |           for_tag:tag IDENT:i1 IN ALL lista_enteros:e CLL {:Compilador.checkDeclaracion(i1);RESULT = Compilador.forIn(i1,"",tag,e);:}
+                        |           for_tag:tag IDENT:k AC exp:e CC IN IDENT:i2 {:RESULT = Compilador.forIn(k+"["+e+"]",i2,tag,null);:}
+                        ; 
+            
+exp                     ::=         exp:e1 MAS exp:e2 {:RESULT = Compilador.operacion(e1,e2,"+");c=false;:}
+                        |           exp:e1 MENOS exp:e2 {:RESULT = Compilador.operacion(e1,e2,"-");c=false;:}
+                        |           exp:e1 POR exp:e2 {:RESULT = Compilador.operacion(e1,e2,"*");:}
+                        |           exp:e1 DIV exp:e2 {:RESULT = Compilador.operacion(e1,e2,"/");:}
+                        |           exp:e1 MOD exp:e2 {:RESULT = Compilador.operacion(e1,Compilador.operacion(Compilador.operacion(e1,e2,"/"),e2,"*"),"-");:}
+                        |           MENOS exp:e {:RESULT = Compilador.operacion("",e,"-");:} %prec UMINUS
+                        |           CINT exp:e {:RESULT = Compilador.operacion("",e,"(int)");c=false;:}
+                        |           CFLOAT exp:e {:RESULT = Compilador.operacion("",e,"(float)");:}
+                        |           CCHAR exp:e {:RESULT = e; x="char";c=true;:}
+                        |           INCR IDENT:i {:RESULT = Compilador.prepost("PRE" , i, i + " + 1");:}
+                        |           DECR IDENT:i {:RESULT = Compilador.prepost("PRE" , i, i + " - 1");:}
+                        |           IDENT:i INCR {:RESULT = Compilador.prepost("POST", i, i + " + 1");:}
+                        |           IDENT:i DECR {:RESULT = Compilador.prepost("POST", i, i + " - 1");:}
+                        |           IDENT:k ASIG exp:v {: if(Compilador.isType(k,"char"))x="char";RESULT = Compilador.asig(k,v,x,false); x="-1";:}
+                        |           IDENT:k MASIGUAL exp:v {:RESULT = Compilador.asig(k,k + " + " + v,"-1",false);:}
+                        |           IDENT:k MENOSIGUAL exp:v {:RESULT = Compilador.asig(k,k + " - " + v,"-1",false);:}
+                        |           IDENT:k PORIGUAL exp:v {:RESULT = Compilador.asig(k,k + " * " + v,"-1",false);:}
+                        |           IDENT:k ENTREIGUAL exp:v {:RESULT = Compilador.asig(k,k + " / " + v,"-1",false);:}
+                        |           ENTERO:k MASIGUAL exp:v {:Compilador.error("operacion no valida");:}
+                        |           ENTERO:k MENOSIGUAL exp:v {:Compilador.error("operacion no valida");:}
+                        |           ENTERO:k PORIGUAL exp:v {:Compilador.error("operacion no valida");:}
+                        |           ENTERO:k ENTREIGUAL exp:v {:Compilador.error("operacion no valida");:}
+                        |           IDENT:k AC exp:e CC ASIG exp:v {:if(Compilador.isType(k,"char"))c=true;Compilador.checkRango(k,e); RESULT = Compilador.asig(k,v,e,true);:}
+                        |           IDENT:k AC exp:e CC {:Compilador.checkRango(k,e);c=Compilador.isType(k,"char");RESULT = Compilador.operacion( k + "[" + e + "]","","");:}
+                        |           IDENT:k AC exp:e1 CC AC exp:e2 CC {:Compilador.checkRangoMultiple(k,e1,e2,""); String pos = Compilador.calculaMultiArray(k,e1,e2,"");RESULT = Compilador.operacion(k + "[" + pos + "]","","");:}
+                        |           IDENT:k AC exp:e1 CC AC exp:e2 CC ASIG exp:v {:Compilador.checkRangoMultiple(k,e1,e2,""); String pos = Compilador.calculaMultiArray(k,e1,e2,"");RESULT = Compilador.asig(k,v,pos,false);:}
+                        |           IDENT:k AC exp:e1 CC AC exp:e2 CC AC exp:e3 CC {:Compilador.checkRangoMultiple(k,e1,e2,e3); String pos = Compilador.calculaMultiArray(k,e1,e2,e3);RESULT = Compilador.operacion(k + "[" + pos + "]","","");:}
+                        |           IDENT:k AC exp:e1 CC AC exp:e2 CC AC exp:e3 CC ASIG exp:v {:Compilador.checkRangoMultiple(k,e1,e2,e3); String pos = Compilador.calculaMultiArray(k,e1,e2,e3);RESULT = Compilador.asig(k,v,pos,false);:}
+                        |           IDENT:i {:RESULT = Compilador.checkDeclaracion(i); c = Compilador.checkChar(i);:}
+                        |           puntero:tag IDENT:k {:Compilador.checkDeclaracion(k);RESULT = Compilador.puntero(tag.length(),k);:}
+                        |           puntero:tag IDENT:k ASIG exp:e {:RESULT = Compilador.asig("*"+k,e,"-1",false);:}
+                        |           AMPERSAND IDENT:k {:RESULT = Compilador.operacion("&"+k,"","");:}
+                        |           AMPERSAND AMPERSAND exp {:RESULT = "0"; Compilador.error("operacion no valida");:}
+                        |           ENTERO:e {:RESULT = e;:}
+                        |           REAL:e {:RESULT = e;:}
+                        |           AP exp:e CP {:RESULT = e;:}
+                        |           IDENT:k ASIG ALL lista_enteros:l CLL {:if(Compilador.isType(k,"char"))c=true;RESULT = Compilador.inicializaArray(k,l,true);:}
+                        |           IDENT:k ASIG ALL lista_multiple:l CLL {:RESULT = Compilador.inicializaArrayMultiple(k,l);:}
+                        |           IDENT:k ASIG ALL lista_triple:l CLL {:RESULT = Compilador.inicializaArrayTriple(k,l);:}
+                        |           cond:c ternario:tag {:Compilador.etiqueta(c.getA());:} exp:op1 {:RESULT = Compilador.asig("$t0",op1,"-1",false);Compilador.goToLabel(tag);Compilador.etiqueta(c.getB());:} DP exp:op2 {:RESULT = Compilador.asig("$t0",op2,"-1",false);Compilador.etiqueta(tag);:}
+                        |           exp:e1 elvis:tag {:RESULT = Compilador.asig("$t0",e1,"-1",false);System.out.println("if(" + e1 + "!=" + 0 + ") goto " + tag + " ;");:} exp:e2 {:RESULT = Compilador.asig("$t0",e2,"-1",false); Compilador.etiqueta(tag);:}
+                        |           CHARTEXT:t {:RESULT = Compilador.creaChar(t); c=true;:}
+                        |           operador:t {:RESULT = t;:}
+                        |           IDENT:k PUNTO LENGTH {:c=false;RESULT = Compilador.operacion("$"+k+"_length","","");:}
+                        |
+                        ;
+
+operador                ::=         MONTE exp:t {:RESULT = Compilador.operaChar("MONTE",t);c=true;:}
+                        |           MAYUS exp:t {:RESULT = Compilador.operaChar("MAYUS",t);c=true;:}
+                        |           NEG exp:t {:RESULT = Compilador.operaChar("NEG",t);c=true;:}
+                        ;
+
+elvis                   ::=         ELVIS {:Compilador.declaracion("int","$t0","0"); RESULT = Compilador.generarTag();:}
+                        ;
+
+ternario                ::=         INTERR {:Compilador.declaracion("int","$t0","0"); RESULT = Compilador.generarTag();:}
+                        ;
+
+declaracion             ::=         INT lista_variables_int
+                        |           FLOAT lista_variables_float
+                        |           CHAR lista_variables_char
+                        |           array
+                        |           array_multiple
+                        |           INT puntero:tag IDENT:k {:RESULT = Compilador.declaracion(tag+"int",k,"0");:}
+                        |           STRING lista_variables_string
+                        ;
+
+puntero                 ::=         POR {:RESULT = "*";:}
+                        |           POR puntero:p {:p+="*"; RESULT=p;:}
+                        ;
+
+array                   ::=         INT IDENT:k AC ENTERO:e CC ASIG ALL lista_enteros:l CLL {:RESULT = Compilador.declaracionArray("int",k,e,"","","");Compilador.inicializaArray(k,l,false);:}
+                        |           INT IDENT:k AC ENTERO:l CC {:RESULT = Compilador.declaracionArray("int",k,l,"","","");:}
+                        |           CHAR IDENT:k AC ENTERO:e CC ASIG ALL lista_enteros:l CLL {:RESULT = Compilador.declaracionArray("char",k,e,"","","");Compilador.inicializaArray(k,l,false);:}
+                        |           CHAR IDENT:k AC ENTERO:l CC {:RESULT = Compilador.declaracionArray("char",k,l,"","","");:}
+                        |           FLOAT IDENT:k AC ENTERO:e CC ASIG ALL lista_enteros:l CLL {:RESULT = Compilador.declaracionArray("float",k,e,"","","");Compilador.inicializaArray(k,l,false);:}
+                        |           FLOAT IDENT:k AC ENTERO:l CC {:RESULT = Compilador.declaracionArray("float",k,l,"","","");:}
+                        |           INT IDENT AC IDENT CC {:Compilador.error("Solo se permiten array con longitud entera");:}
+                        |           FLOAT IDENT AC IDENT CC {:Compilador.error("Solo se permiten array con longitud entera");:}
+                        ;
+
+array_multiple          ::=         INT IDENT:k AC ENTERO:e1 CC AC ENTERO:e2 CC ASIG ALL lista_multiple:l CLL {:int x = Integer.parseInt(e1) * Integer.parseInt(e2); RESULT = Compilador.declaracionArray("int",k,Integer.toString(x),e1,e2,"");Compilador.inicializaArrayMultiple(k,l);:}
+                        |           INT IDENT:k AC ENTERO:e1 CC AC ENTERO:e2 CC {:int x = Integer.parseInt(e1) * Integer.parseInt(e2); RESULT = Compilador.declaracionArray("int",k,Integer.toString(x),e1,e2,"");:}
+                        |           INT IDENT:k AC ENTERO:e1 CC AC ENTERO:e2 CC AC ENTERO:e3 CC ASIG ALL lista_triple:l CLL {:int x = Integer.parseInt(e1) * Integer.parseInt(e2) * Integer.parseInt(e3); RESULT = Compilador.declaracionArray("int",k,Integer.toString(x),e1,e2,e3);Compilador.inicializaArrayTriple(k,l);:}
+                        |           INT IDENT:k AC ENTERO:e1 CC AC ENTERO:e2 CC AC ENTERO:e3 CC {:int x = Integer.parseInt(e1) * Integer.parseInt(e2) * Integer.parseInt(e3); RESULT = Compilador.declaracionArray("int",k,Integer.toString(x),e1,e2,e3);:}
+                        ;
+
+lista_enteros           ::=         exp:e {:ArrayList<String> as = new ArrayList<>(); as.add(e); RESULT = as; :}
+                        |           exp:e COMA lista_enteros:m {:m.add(e); RESULT = m;:}
+                        ;
+
+lista_multiple          ::=         ALL lista_enteros:e CLL {:ArrayList<ArrayList<String>> as = new ArrayList<>(); as.add(e); RESULT = as; :}
+                        |           ALL lista_enteros:e CLL COMA lista_multiple:m {:m.add(e); RESULT = m;:}
+                        ;
+
+lista_triple            ::=         ALL lista_multiple:e CLL {:ArrayList<ArrayList<ArrayList<String>>> as = new ArrayList<>(); as.add(e); RESULT = as; :}
+                        |           ALL lista_multiple:e CLL COMA lista_triple:m {:m.add(e); RESULT = m;:}
+                        ;
+
+lista_variables_int     ::=         IDENT:k ASIG exp:v COMA {:RESULT = Compilador.declaracion("int",k,v); :} lista_variables_int
+                        |           IDENT:k COMA {:RESULT = Compilador.declaracion("int",k,"0");:} lista_variables_int
+                        |           IDENT:k ASIG exp:v {:RESULT = Compilador.declaracion("int",k,v); :}
+                        |           IDENT:k {:RESULT = Compilador.declaracion("int",k,"0");:}
+                        ; 
+lista_variables_float   ::=         IDENT:k ASIG exp:v COMA {:RESULT = Compilador.declaracion("float",k,v); :} lista_variables_float
+                        |           IDENT:k COMA {:RESULT = Compilador.declaracion("float",k,"0");:} lista_variables_float
+                        |           IDENT:k ASIG exp:v {:RESULT = Compilador.declaracion("float",k,v); :}
+                        |           IDENT:k {:RESULT = Compilador.declaracion("float",k,"0");:}
+                        ;
+
+lista_variables_char    ::=         IDENT:k ASIG CHARTEXT:v COMA {:RESULT = Compilador.declaracion("char",k,Compilador.creaChar(v)); :} lista_variables_char
+                        |           IDENT:k COMA {:RESULT = Compilador.declaracion("char",k,"0");:} lista_variables_char
+                        |           IDENT:k ASIG CHARTEXT:v {:RESULT = Compilador.declaracion("char",k,Compilador.creaChar(v)); :}
+                        |           IDENT:k {:RESULT = Compilador.declaracion("char",k,"0");:}
+                        ;
+
+lista_variables_string  ::=         IDENT:k ASIG STRINGTEXT:v COMA {:RESULT = Compilador.declaracion("String",k,v); :} lista_variables_string
+                        |           IDENT:k COMA {:RESULT = Compilador.declaracion("String",k,""); :} lista_variables_string
+                        |           IDENT:k ASIG STRINGTEXT:v {:RESULT = Compilador.declaracion("String",k,v); :}
+                        |           IDENT:k {:RESULT = Compilador.declaracion("String",k,""); :}
+                        ;
+
+cond                    ::=         exp:e1 IGUAL exp:e2 {:RESULT = Compilador.condicion("IGUAL" ,e1,e2);:}
+                        |           exp:e1 DIST exp:e2 {:RESULT = Compilador.condicion("DIST" ,e1,e2);:}
+                        |           exp:e1 MENOR exp:e2 {:RESULT = Compilador.condicion("MENOR" ,e1,e2);:}
+                        |           exp:e1 MAYOR exp:e2 {:RESULT = Compilador.condicion("MAYOR" ,e1,e2);:}
+                        |           exp:e1 MAYOREQ exp:e2 {:RESULT = Compilador.condicion("MAYOREQ",e1,e2);:}
+                        |           exp:e1 MENOREQ exp:e2 {:RESULT = Compilador.condicion("MENOREQ",e1,e2);:}
+                        |           NEG cond:c {:RESULT = Compilador.operador("NOT",c,null);:}
+                        |           cond:c1 AND {:Compilador.etiqueta(c1.getA());:} cond:c2 {:RESULT = Compilador.operador("AND",c1,c2) ;:}
+                        |           cond:c1 OR {:Compilador.etiqueta(c1.getB());:} cond:c2 {:RESULT = Compilador.operador("OR" ,c1,c2) ;:}
+                        |           AP cond:e CP {:RESULT = e;:}
+                        ;
